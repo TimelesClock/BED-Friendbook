@@ -72,7 +72,7 @@ app.put("/users/:userID/", (req, res, next) => {
         return res.status(204).send();
     });
 });
-//whoever made this pract shld kill himself
+
 app.get('/users/:userID/friends', (req, res) => {
     const userID = parseInt(req.params.userID);
     if (isNaN(userID)) {
