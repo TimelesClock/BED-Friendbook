@@ -4,6 +4,9 @@ var user = require('../model/User.js');
 var post = require('../model/Post.js')
 var bodyParser = require('body-parser')
 var urlencodedParser = bodyParser.urlencoded({ extended: false })
+const jwt = require("jsonwebtoken");
+const JWT_SECRET = require("../config.js");
+const isLoggedInMiddleware = require("../auth/isLoggedInMiddleware");
 
 app.use(bodyParser.json())
 app.use(urlencodedParser)
@@ -56,10 +59,14 @@ app.post("/users/", (req, res, next) => {
     });
 });
 
-app.put("/users/:userID/", (req, res, next) => {
+app.put("/users/:userID/", isLoggedInMiddleware, (req, res, next) => {
     const userID = parseInt(req.params.userID);
     if (isNaN(userID)) {
         res.status(400).send();
+        return;
+    }
+    if (userID !== req.decodedToken.user_id) {
+        res.status(403).send();
         return;
     }
 
@@ -90,7 +97,7 @@ app.get('/users/:userID/friends', (req, res) => {
     })
 })
 
-app.post('/users/:userID/friends/:friendID', (req, res) => {
+app.post('/users/:userID/friends/:friendID', isLoggedInMiddleware, (req, res) => {
     const userID = req.params.userID
     const friendID = req.params.friendID
 
@@ -101,6 +108,11 @@ app.post('/users/:userID/friends/:friendID', (req, res) => {
 
     if (isNaN(userID) || isNaN(friendID)) {
         res.status(400).send();
+        return;
+    }
+
+    if (userID !== req.decodedToken.user_id) {
+        res.status(403).send();
         return;
     }
 
@@ -119,13 +131,17 @@ app.post('/users/:userID/friends/:friendID', (req, res) => {
     })
 })
 
-app.delete('/users/:userID/friends/:friendID', (req, res) => {
+app.delete('/users/:userID/friends/:friendID', isLoggedInMiddleware, (req, res) => {
     const userID = req.params.userID
     const friendID = req.params.friendID
 
     if (isNaN(userID) || isNaN(friendID) || userID === friendID) {
         res.status(500).send()
         return
+    }
+    if (userID !== req.decodedToken.user_id) {
+        res.status(403).send();
+        return;
     }
 
     user.removeFriend(userID, friendID, (err, result) => {
@@ -156,6 +172,12 @@ app.get('/posts/', (req, res) => {
 })
 
 app.post('/posts/', (req, res) => {
+    const userID = req.fk_poster_id
+    if (userID !== req.decodedToken.user_id) {
+        res.status(403).send();
+        return;
+    }
+
     post.insert(req.body, (err, result) => {
         if (!err) {
             res.status(201).send({ result })
@@ -191,53 +213,100 @@ app.get("/posts/:postID/", (req, res, next) => {
     });
 });
 
-app.delete('/posts/:postid/', function (req, res) {
-    var postid = req.params.postid
+app.delete('/posts/:postid/',isLoggedInMiddleware, function (req, res) {
+    const postID = parseInt(req.params.postid)
 
-    post.delete(postid, function (err, result) {
-        if (!err) {
-            res.status(204).send()
-            return
+    var postIds = []
+    post.findByUserID(req.decodedToken.user_id, (error, result) => {
+        if (error) {
+            console.log(error)
+            return res.status(500).send()
         } else {
-            console.log(err)
 
-            res.status(500).send()
-            return
+            postIds = result.map(posts => posts.id)
+            console.log(postIds === [])
+            if (!postIds.includes(postID) && postIds.length != 0) {
+                return res.status(403).send()
+     
+            }
+            else if(postIds.length == 0){
+                return res.status(204).send()
+            }
+            else {
+                post.delete(postID, function (err, result) {
+                    if (!err) {
+                        res.status(204).send()
+                        return
+                    } else {
+                        console.log(err)
+
+                        res.status(500).send()
+                        return
+                    }
+                })
+            }
+
+
         }
     })
+
+
 })
 
-app.put("/posts/:postID/", (req, res) => {
+app.put("/posts/:postID/", isLoggedInMiddleware, (req, res) => {
     const postID = parseInt(req.params.postID);
     if (isNaN(postID)) {
         return res.status(400).send();
 
     }
+    var postIds = []
+    post.findByUserID(req.decodedToken.user_id, (error, result) => {
+        if (error) {
+            console.log(error)
+            return res.status(500).send()
+        } else {
 
-    post.edit(postID, req.body, (error, results) => {
-        if (results === 0) {
-            return res.status(404).send()
-        }else if (error) {
-            console.log(error);
-            return res.status(500).send();
-        }else {
-            return res.status(204).send();
+            postIds = result.map(posts => posts.id)
+            if (!postIds.includes(postID)) {
+                return res.status(403   ).send()
+            } else {
+                post.edit(postID, req.body, (error, results) => {
+                    if (results === 0) {
+                        return res.status(404).send()
+                    } else if (error) {
+                        console.log(error);
+                        return res.status(500).send();
+                    } else {
+                        return res.status(204).send();
+                    }
+                });
+            }
+
+
         }
-    });
+    })
+
+
 });
 
-app.post('/posts/:postID/likers/:likeID/', (req, res) => {
-    const likerID = req.params.likeID
-    const postID = req.params.postID
+app.post('/posts/:postID/likers/:likeID/',isLoggedInMiddleware, (req, res) => {
+    var likerID = req.params.likeID
+    var postID = req.params.postID
     if (isNaN(postID) || isNaN(likerID)) {
         res.status(400).send();
         return;
     }
+    likerID = parseInt(likerID)
+    postID = parseInt(postID)
+    if(likerID !== req.decodedToken.user_id){
+        return res.status(403).send()
+    }
+
     post.like(postID, likerID, (err, result) => {
 
         if (err) {
             if (err.code === "ER_DUP_ENTRY") {
-                res.status(201).send()
+                res.status(204).send()
                 return
             }
             res.status(500).send()
@@ -249,13 +318,21 @@ app.post('/posts/:postID/likers/:likeID/', (req, res) => {
     })
 })
 
-app.delete('/posts/:postID/likers/:likeID/', (req, res) => {
-    const likerID = req.params.likeID
-    const postID = req.params.postID
+app.delete('/posts/:postID/likers/:likeID/',isLoggedInMiddleware, (req, res) => {
+    var likerID = req.params.likeID
+    var postID = req.params.postID
     if (isNaN(postID) || isNaN(likerID)) {
         res.status(400).send();
         return;
     }
+
+    likerID = parseInt(likerID)
+    postID = parseInt(postID)
+
+    if(likerID !== req.decodedToken.user_id){
+        return res.status(403).send()
+    }
+
     post.unlike(postID, likerID, (err, result) => {
         if (err) {
             res.status(500).send()
@@ -312,5 +389,34 @@ app.get('/posts/:postID/likers', (req, res) => {
         return
     })
 })
+
+app.post("/login/", (req, res) => {
+    user.verify(
+        req.body.username,
+        req.body.password,
+        (error, user) => {
+            if (error) {
+                res.status(500).send();
+                return;
+            }
+            if (user === null) {
+                res.status(401).send();
+                return;
+            }
+            const payload = { user_id: user.id };
+            jwt.sign(payload, JWT_SECRET, { algorithm: "HS256" }, (error,
+                token) => {
+                if (error) {
+                    console.log(error);
+                    res.status(401).send();
+                    return;
+                }
+                res.status(200).send({
+                    token: token,
+                    user_id: user.id
+                });
+            })
+        });
+});
 
 module.exports = app

@@ -141,6 +141,7 @@ const Post = {
                 console.log(err);
                 return callback(err, null);
             } else {
+                
                 const editPostQuery =
                     `
         UPDATE post
@@ -151,9 +152,9 @@ const Post = {
                 dbConn.query(editPostQuery, [post.text_body, postID], (error,
                     results) => {
                     if (error) {
-                        return callback(error,null);
+                        return callback(error, null);
                     };
-                    return callback(null,results.affectedRows);
+                    return callback(null, results.affectedRows);
                 });
             }
         });
@@ -252,9 +253,10 @@ const Post = {
             } else {
                 const findLikersQuery =
                     `
-    SELECT user.* FROM user, likes
-    where likes.fk_user_id = user.id
-    and likes.fk_post_id = ?
+                    SELECT user.id, user.full_name, user.username, user.bio,
+                    user.date_of_birth, user.created_at FROM user, likes where
+                    likes.fk_user_id = user.id
+                    and likes.fk_post_id = ?
     `;
                 dbConn.query(findLikersQuery, postID, (error, results) => {
                     dbConn.end();
@@ -290,9 +292,9 @@ const Post = {
 
                 const findLikersQuery =
                     `
-    SELECT u.*, l.fk_post_id FROM user u,likes l
-    WHERE l.fk_user_id = u.id
-    AND l.fk_post_id IN (?);
+                    SELECT user.id, user.full_name, user.username, user.bio,
+                    user.date_of_birth, user.created_at, likes.fk_post_id FROM user,likes
+                    where likes.fk_user_id = user.id and likes.fk_post_id IN (?);
     `;
 
                 dbConn.query(findLikersQuery, [postIDs], (error, likers) => {
